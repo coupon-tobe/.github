@@ -39,7 +39,7 @@ cd cupi-gitops/local-dev
 cp .env.example .env
 ```
 
-`.env`는 커밋하지 않습니다. 로컬 DB 비밀번호, PaaS DB 비밀번호 같은 값은 개발자 PC의 `.env`에만 둡니다.
+`.env`는 커밋하지 않습니다. 기본 개발 DB는 PaaS PostgreSQL이며, DB 비밀번호는 개발자 PC의 `.env`에만 둡니다. 당분간 write/read DB는 동일한 PaaS DB 접속 정보를 사용합니다.
 
 ### 2. 인프라만 실행
 
@@ -51,14 +51,15 @@ docker compose up -d
 
 | Component | Host port | Container/usage |
 | --- | ---: | --- |
-| PostgreSQL write | 5432 | `cupi-postgres-write` |
-| PostgreSQL read scaffold | 5433 | `cupi-postgres-read` |
+| PostgreSQL write scaffold | 5432 | `cupi-postgres-write`, 선택 사용 |
+| PostgreSQL read scaffold | 5433 | `cupi-postgres-read`, 선택 사용 |
 | Redis | 6379 | `cupi-redis` |
 | Kafka | 9092 | host app: `localhost:9092`, container app: `kafka:29092` |
 | Kafka UI | 9000 | http://localhost:9000 |
 | pgAdmin | 5050 | http://localhost:5050 |
 
 Kafka 기본 topic과 DLQ topic은 `kafka-init` 컨테이너가 생성합니다.
+Spring Boot 서비스는 별도 설정을 하지 않으면 PaaS PostgreSQL을 사용합니다. 로컬 PostgreSQL 컨테이너는 격리 DB가 필요할 때 `.env`의 `POSTGRES_*` 값을 바꿔 사용합니다.
 
 ### 3. 전체 서비스 일괄 실행
 
@@ -100,18 +101,18 @@ cd coupon-catalog
 ./gradlew bootRun --args='--spring.profiles.active=local'
 ```
 
-### 5. PaaS DB로 로컬 개발
+### 5. DB 설정
 
-로컬 PostgreSQL 대신 PaaS PostgreSQL에 붙어서 개발해야 하면 PaaS DB 템플릿을 사용합니다.
+기본 개발 DB는 PaaS PostgreSQL입니다. `.env.example`을 복사한 뒤 비밀번호만 로컬에서 입력합니다.
 
 ```bash
 cd cupi-gitops/local-dev
-cp .env.paas.example .env
-vi .env   # APP_POSTGRES_WRITE_PASSWORD 값만 로컬에서 입력
+cp .env.example .env
+vi .env   # POSTGRES_WRITE_PASSWORD / POSTGRES_READ_PASSWORD 입력
 docker compose --profile apps up -d --build
 ```
 
-호스트 JVM에서 PaaS DB로 개별 실행:
+호스트 JVM에서 개별 실행:
 
 ```bash
 cd cupi-gitops/local-dev
@@ -120,10 +121,10 @@ set -a
 set +a
 
 cd ../../coupon-catalog
-./gradlew bootRun --args='--spring.profiles.active=local,paas-db'
+./gradlew bootRun --args='--spring.profiles.active=local'
 ```
 
-`paas-db` 프로필은 DB 접속지만 PaaS로 전환합니다. Redis, Kafka, JWKS 등 다른 개발 의존성은 로컬 compose 환경을 사용합니다.
+write/read는 당분간 같은 PaaS DB 접속 정보를 사용합니다. 로컬 PostgreSQL scaffold를 강제로 쓰려면 `.env`의 `POSTGRES_WRITE_HOST=postgres-write`, `POSTGRES_WRITE_DB=cupi_write`, `POSTGRES_WRITE_USER=cupi`, `POSTGRES_WRITE_PASSWORD=cupi`, `POSTGRES_SSL_MODE=disable` 로 바꿉니다.
 
 ### 6. 구동 확인
 
