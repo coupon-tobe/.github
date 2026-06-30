@@ -265,6 +265,171 @@ open http://localhost:8087/swagger-ui.html  # coupon-auth
 
 서비스 컨테이너가 떠 있지 않으면 해당 서비스의 API 문서는 Hub에서 로딩되지 않습니다.
 
+#### Controller에 Swagger/OpenAPI 적용 방법
+
+신규 Controller를 만들거나 기존 API를 수정할 때는 HTTP API 계약이 Swagger Hub에 바로 드러나도록 springdoc annotation을 함께 작성합니다.
+
+1. 서비스에 springdoc 의존성이 있는지 확인합니다.
+
+```gradle
+implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui"
+```
+
+2. 서비스 공통 `OpenApiConfig`에 API 제목, 버전, JWT 보안 스킴을 둡니다.
+
+```java
+@Configuration
+public class OpenApiConfig {
+    private static final String BEARER = "bearerAuth";
+
+    @Bean
+    public OpenAPI openAPI() {
+        return new OpenAPI()
+                .info(new Info()
+                        .title("coupon-catalog API")
+                        .version("0.0.1-SNAPSHOT")
+                        .description("CUPI To-Be coupon-catalog service API"))
+                .addSecurityItem(new SecurityRequirement().addList(BEARER))
+                .components(new Components().addSecuritySchemes(BEARER,
+                        new SecurityScheme()
+                                .type(SecurityScheme.Type.HTTP)
+                                .scheme("bearer")
+                                .bearerFormat("JWT")));
+    }
+}
+```
+
+3. Controller에는 `@Tag`, `@Operation`, `@ApiResponses`, `@Parameter`를 붙입니다.
+
+```java
+@Tag(name = "Coupon Catalog", description = "쿠폰 상품/정책 관리 API")
+@RestController
+@RequestMapping("/api/v1/catalog/coupons")
+public class CouponCatalogController {
+
+    @Operation(summary = "쿠폰 상품 조회", description = "쿠폰 상품 ID로 상세 정보를 조회합니다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 성공"),
+            @ApiResponse(responseCode = "404", description = "쿠폰 상품 없음")
+    })
+    @GetMapping("/{couponId}")
+    public CouponResponse getCoupon(
+            @Parameter(description = "쿠폰 상품 ID", example = "CPN-2026-0001")
+            @PathVariable String couponId
+    ) {
+        return couponService.getCoupon(couponId);
+    }
+}
+```
+
+4. Request/Response DTO에는 필드 단위 `@Schema`를 작성합니다.
+
+```java
+public record CouponResponse(
+        @Schema(description = "쿠폰 상품 ID", example = "CPN-2026-0001")
+        String couponId,
+
+        @Schema(description = "쿠폰 이름", example = "신규 가입 10% 할인")
+        String name
+) {
+}
+```
+
+Controller Swagger 작성 기준:
+
+- API summary는 화면 목록에서 의미가 드러나도록 짧게 작성합니다.
+- description에는 업무 조건, 권한, 주요 예외를 적습니다.
+- path/query/header parameter에는 `description`과 `example`을 넣습니다.
+- request/response DTO 필드는 `@Schema`로 의미와 예시를 남깁니다.
+- 에러 응답은 공통 `ProblemDetail` 포맷을 기준으로 문서화합니다.
+- 인증이 필요한 API는 전역 `bearerAuth` 스킴을 사용합니다.
+
+작성 후 확인:
+
+```bash
+open http://localhost:8081/v3/api-docs
+open http://localhost:8081/swagger-ui.html
+open http://localhost:9010
+```
+
+#### Kafka 통신/연동 문서화 방법
+
+Swagger/OpenAPI는 HTTP API 문서화 표준입니다. Kafka topic, event payload, producer/consumer 계약은 OpenAPI에 억지로 넣지 않고 AsyncAPI 또는 서비스별 `docs/events.md`에 이벤트 계약으로 관리합니다. Swagger Hub에는 HTTP API를 노출하고, Kafka 연동은 Kafka UI와 이벤트 계약 문서로 검증합니다.
+
+Kafka 이벤트 계약 문서에 반드시 남길 항목:
+
+| 항목 | 설명 |
+| --- | --- |
+| Topic | 발행/구독 topic 이름과 DLQ topic |
+| Producer | 이벤트를 발행하는 서비스와 발행 시점 |
+| Consumer | 이벤트를 구독하는 서비스와 처리 목적 |
+| Key | partition key 기준 |
+| Event type | `eventType` 값 |
+| Payload schema | JSON field, type, required 여부, example |
+| Retry/DLQ | 재시도 정책과 DLQ 이동 조건 |
+| Idempotency | 중복 수신 처리 기준 |
+
+권장 이벤트 envelope:
+
+```json
+{
+  "eventId": "uuid",
+  "eventType": "coupon.creation.requested",
+  "aggregateId": "CPN-2026-0001",
+  "occurredAt": "2026-06-30T10:00:00Z",
+  "producer": "coupon-catalog",
+  "traceId": "trace-id",
+  "payload": {
+    "couponId": "CPN-2026-0001",
+    "name": "신규 가입 10% 할인"
+  }
+}
+```
+
+Kafka producer/consumer 코드에는 topic 이름을 하드코딩하지 않고 설정값 또는 상수로 분리합니다.
+
+```java
+@Component
+public class CouponEventProducer {
+    private final KafkaTemplate<String, CouponEvent> kafkaTemplate;
+    private final String topic;
+
+    public CouponEventProducer(
+            KafkaTemplate<String, CouponEvent> kafkaTemplate,
+            @Value("${app.kafka.topics.coupon-creation-events}") String topic
+    ) {
+        this.kafkaTemplate = kafkaTemplate;
+        this.topic = topic;
+    }
+
+    public void publish(CouponEvent event) {
+        kafkaTemplate.send(topic, event.aggregateId(), event);
+    }
+}
+```
+
+```java
+@KafkaListener(
+        topics = "${app.kafka.topics.coupon-creation-events}",
+        groupId = "${spring.kafka.consumer.group-id}"
+)
+public void consume(CouponEvent event) {
+    couponEventHandler.handle(event);
+}
+```
+
+Kafka 문서 작성 후 확인:
+
+```bash
+open http://localhost:9000
+
+docker exec cupi-kafka /opt/bitnami/kafka/bin/kafka-topics.sh \
+  --bootstrap-server localhost:9092 \
+  --list
+```
+
+Kafka 이벤트를 HTTP API와 연결해야 하는 경우에는 Controller의 `@Operation.description`에 "이 API 호출 시 `{topic}`으로 `{eventType}` 이벤트를 발행한다"처럼 연결 관계만 적고, 상세 payload 계약은 `docs/events.md` 또는 AsyncAPI 문서로 연결합니다.
+
 ### 7. Kafka 정상 구동 확인
 
 컨테이너 상태와 로그:
