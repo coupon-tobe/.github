@@ -95,6 +95,7 @@ docker compose up -d
 | Redis | 6379 | host app: `localhost:6379`, container app: `redis:6379` |
 | Kafka | 9092 | host app: `localhost:9092`, container app: `kafka:29092` |
 | Kafka UI | 9000 | http://localhost:9000 |
+| API Docs Hub | 9010 | http://localhost:9010 |
 | pgAdmin | 5050 | http://localhost:5050 |
 
 Kafka 기본 topic과 DLQ topic은 `kafka-init` 컨테이너가 생성합니다. Spring Boot 서비스는 별도 설정을 하지 않으면 PaaS PostgreSQL을 사용합니다.
@@ -106,6 +107,13 @@ Kafka 기본 topic과 DLQ topic은 `kafka-init` 컨테이너가 생성합니다.
 ```bash
 cd ~/workspace/cupon-tobe/cupi-gitops/local-dev
 docker compose --profile apps up -d --build
+```
+
+Swagger/OpenAPI 통합 Hub만 실행:
+
+```bash
+docker compose --profile docs up -d api-docs-proxy
+open http://localhost:9010
 ```
 
 개별 서비스를 컨테이너로 실행:
@@ -206,7 +214,33 @@ done
 | `coupon.common.events` / `.dlq` | 기준정보 변경 이벤트 |
 | `coupon.batch.events` / `.dlq` | 배치 실행/완료 이벤트 |
 
-### 6. Kafka 정상 구동 확인
+### 6. API 문서 통합 확인
+
+9개 서비스의 Swagger/OpenAPI 문서는 API Docs Hub에서 한 번에 확인합니다.
+
+```bash
+cd ~/workspace/cupon-tobe/cupi-gitops/local-dev
+docker compose --profile apps up -d --build
+open http://localhost:9010
+```
+
+Hub 구성:
+
+| Component | 용도 |
+| --- | --- |
+| `cupi-api-docs-ui` | Swagger UI |
+| `cupi-api-docs` | 각 서비스 `/v3/api-docs`를 같은 origin으로 묶는 nginx proxy |
+
+각 서비스의 개별 Swagger UI도 사용할 수 있습니다.
+
+```bash
+open http://localhost:8081/swagger-ui.html  # coupon-catalog
+open http://localhost:8087/swagger-ui.html  # coupon-auth
+```
+
+서비스 컨테이너가 떠 있지 않으면 해당 서비스의 API 문서는 Hub에서 로딩되지 않습니다.
+
+### 7. Kafka 정상 구동 확인
 
 컨테이너 상태와 로그:
 
@@ -239,7 +273,7 @@ docker exec cupi-kafka /opt/bitnami/kafka/bin/kafka-topics.sh \
   --list | sort | grep -E 'coupon\.(creation|transaction|issue|omss|notification|interface|common|batch)\.events(\.dlq)?'
 ```
 
-### 7. Kafka 송수신 확인
+### 8. Kafka 송수신 확인
 
 테스트용 consumer를 먼저 실행합니다.
 
@@ -264,7 +298,7 @@ consumer 터미널에 같은 JSON이 출력되면 Kafka broker, topic, produce/c
 
 호스트 JVM 서비스에서 Kafka에 붙는지 확인할 때는 `KAFKA_BOOTSTRAP_SERVERS=localhost:9092`, 컨테이너 서비스에서 확인할 때는 `KAFKA_BOOTSTRAP_SERVERS=kafka:29092`인지 먼저 확인합니다.
 
-### 8. 인증/JWKS와 RBAC 확인
+### 9. 인증/JWKS와 RBAC 확인
 
 `coupon-auth`가 떠 있어야 다른 서비스가 JWT 공개키와 RBAC 계약을 기준으로 인증/인가를 수행할 수 있습니다.
 
@@ -289,7 +323,7 @@ curl http://localhost:8087/.well-known/jwks.json
 
 서비스 코드에서는 `@PreAuthorize("hasRole('SYSTEM_ADMIN')")` 또는 `@PreAuthorize("hasAuthority('system:admin')")`로 API 호출 전 권한을 검사합니다.
 
-### 9. 로컬 DB scaffold 사용
+### 10. 로컬 DB scaffold 사용
 
 기본은 PaaS DB입니다. 로컬 PostgreSQL scaffold를 강제로 쓰려면 `.env`를 다음처럼 바꿉니다.
 
@@ -313,7 +347,7 @@ POSTGRES_SSL_MODE=disable
 docker exec cupi-postgres-write pg_isready -U cupi -d cupi_write
 ```
 
-### 10. 종료와 초기화
+### 11. 종료와 초기화
 
 ```bash
 cd ~/workspace/cupon-tobe/cupi-gitops/local-dev
