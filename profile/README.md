@@ -217,6 +217,7 @@ done
 ### 6. API 문서 통합 확인
 
 9개 서비스의 Swagger/OpenAPI 문서는 API Docs Hub에서 한 번에 확인합니다.
+API Docs Hub는 로컬 개발환경에서 여러 Spring Boot 서비스의 `/v3/api-docs`를 한 화면에 모아 보는 Swagger UI입니다. 서비스별 Swagger UI 주소를 따로 외우지 않고, 좌측/상단 서비스 선택 목록에서 대상 서비스를 바꿔가며 API 스펙, 인증 스킴, request/response schema를 확인할 수 있습니다.
 
 ```bash
 cd ~/workspace/cupon-tobe/cupi-gitops/local-dev
@@ -228,8 +229,32 @@ Hub 구성:
 
 | Component | 용도 |
 | --- | --- |
-| `cupi-api-docs-ui` | Swagger UI |
-| `cupi-api-docs` | 각 서비스 `/v3/api-docs`를 같은 origin으로 묶는 nginx proxy |
+| `cupi-api-docs-ui` | `swaggerapi/swagger-ui` 기반 통합 Swagger UI |
+| `cupi-api-docs` | 각 서비스 `/v3/api-docs`와 API 호출 경로를 같은 origin으로 묶는 nginx proxy |
+
+Hub proxy 경로:
+
+| Path | 연결 대상 |
+| --- | --- |
+| `/api-docs/coupon-auth` | `coupon-auth:8087/v3/api-docs` |
+| `/api-docs/coupon-catalog` | `coupon-catalog:8081/v3/api-docs` |
+| `/api-docs/coupon-trx` | `coupon-trx:8082/v3/api-docs` |
+| `/api-docs/coupon-query` | `coupon-query:8083/v3/api-docs` |
+| `/api-docs/coupon-omss` | `coupon-omss:8084/v3/api-docs` |
+| `/api-docs/coupon-issue` | `coupon-issue:8085/v3/api-docs` |
+| `/api-docs/coupon-if` | `coupon-if:8086/v3/api-docs` |
+| `/api-docs/coupon-common` | `coupon-common:8088/v3/api-docs` |
+| `/api-docs/coupon-batch` | `coupon-batch:8089/v3/api-docs` |
+
+API Docs Hub만 따로 띄우면 Swagger UI와 proxy만 실행됩니다. 이 경우 문서를 조회하려는 대상 서비스 컨테이너는 별도로 떠 있어야 합니다.
+
+```bash
+docker compose --profile docs up -d api-docs-proxy
+docker compose up -d --build coupon-catalog
+open http://localhost:9010
+```
+
+Swagger UI의 `Authorize` 버튼에는 `coupon-auth`에서 발급받은 JWT access token을 `Bearer` prefix 없이 입력합니다. API 호출까지 Swagger Hub에서 확인할 수 있지만, 호출 대상 서비스가 기동되어 있고 JWT/JWKS 설정이 정상이어야 합니다.
 
 각 서비스의 개별 Swagger UI도 사용할 수 있습니다.
 
