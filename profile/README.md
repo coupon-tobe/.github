@@ -456,7 +456,7 @@ Kafka 문서 작성 후 확인:
 ```bash
 open http://localhost:9000
 
-docker exec cupi-kafka /opt/bitnami/kafka/bin/kafka-topics.sh \
+docker exec cupi-kafka /opt/kafka/bin/kafka-topics.sh \
   --bootstrap-server localhost:9092 \
   --list
 ```
@@ -485,7 +485,7 @@ open http://localhost:9000
 Topic 목록 확인:
 
 ```bash
-docker exec cupi-kafka /opt/bitnami/kafka/bin/kafka-topics.sh \
+docker exec cupi-kafka /opt/kafka/bin/kafka-topics.sh \
   --bootstrap-server localhost:9092 \
   --list
 ```
@@ -493,7 +493,7 @@ docker exec cupi-kafka /opt/bitnami/kafka/bin/kafka-topics.sh \
 필수 topic 존재 확인:
 
 ```bash
-docker exec cupi-kafka /opt/bitnami/kafka/bin/kafka-topics.sh \
+docker exec cupi-kafka /opt/kafka/bin/kafka-topics.sh \
   --bootstrap-server localhost:9092 \
   --list | sort | grep -E 'coupon\.(creation|transaction|issue|omss|notification|interface|common|batch)\.events(\.dlq)?'
 ```
@@ -503,7 +503,7 @@ docker exec cupi-kafka /opt/bitnami/kafka/bin/kafka-topics.sh \
 테스트용 consumer를 먼저 실행합니다.
 
 ```bash
-docker exec -it cupi-kafka /opt/bitnami/kafka/bin/kafka-console-consumer.sh \
+docker exec -it cupi-kafka /opt/kafka/bin/kafka-console-consumer.sh \
   --bootstrap-server localhost:9092 \
   --topic coupon.creation.events \
   --from-beginning
@@ -512,7 +512,7 @@ docker exec -it cupi-kafka /opt/bitnami/kafka/bin/kafka-console-consumer.sh \
 다른 터미널에서 producer로 메시지를 넣습니다.
 
 ```bash
-docker exec -i cupi-kafka /opt/bitnami/kafka/bin/kafka-console-producer.sh \
+docker exec -i cupi-kafka /opt/kafka/bin/kafka-console-producer.sh \
   --bootstrap-server localhost:9092 \
   --topic coupon.creation.events <<'EOF'
 {"eventId":"local-smoke-001","eventType":"coupon.creation.smoke","aggregateType":"CouponCreation","aggregateId":"SMOKE-001","producer":"local-shell","traceId":"local-trace-001","occurredAt":"2026-06-30T00:00:00Z","payload":{"message":"kafka local smoke test"}}
